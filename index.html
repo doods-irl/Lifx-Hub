@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>LIFX Control</title>
+  <style>
+    @font-face {
+        font-family: "Frank";
+        src: url("Frank-Light.ttf");
+    }
+
+    html, body {
+        font-family: 'Frank';
+        margin: 0;
+        height: 100%;
+        background-color: #BBB;
+    }
+
+    #groups {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 10px;
+        height: 100%;
+    }
+
+    #lights {
+        display: flex;
+        flex-direction: row;
+        gap: 5px;
+        justify-content: space-evenly;
+        height: 100%;
+        padding: 0;
+    }
+
+    #group {
+        min-width: 150px;
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        background-color: #FFF;
+    }
+
+    #group h1 {
+        background-color: tomato;
+        color: white;
+        margin: 0;
+        text-align: center;
+        font-size: x-large;
+        padding: 20px 0;
+    }
+
+    #group .group-controls {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+    }
+
+    .light {
+        display: flex;
+        flex-direction: column;
+        width: 100px;
+        max-width: 100px;
+        text-align: center;
+        flex-grow: 1;
+        padding: 10px;
+        gap: 10px;
+    }
+
+    .light span, .group-controls span {
+        min-height: 100px;
+        align-content: center;
+        background-color: #CCC;
+        color: #FFF;
+        border-radius: 5px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 100ms linear, color 100ms linear;
+    }
+
+    .group-controls span {
+        width: 100px;
+        text-align: center;
+        background-color: #AAA;
+    }
+
+    .group-controls {
+        display: flex;
+        flex-direction: column;
+        background-color: white;
+    }
+
+    input[type="range"] {
+        flex-grow: 1;
+        writing-mode: vertical-lr; direction: rtl
+    }
+
+    /********** Range Input Styles **********/
+    /*Range Reset*/
+    input[type="range"] {
+    -webkit-appearance: none;
+        appearance: none;
+        background: transparent;
+        cursor: pointer;
+    }
+
+    /* Removes default focus */
+    input[type="range"]:focus {
+    outline: none;
+    }
+
+    /***** Chrome, Safari, Opera and Edge Chromium styles *****/
+    /* slider track */
+    input[type="range"]::-webkit-slider-runnable-track {
+    background-color: #CCC;
+    border-radius: 5px;
+    height: 0.5rem;
+    }
+
+    /* slider thumb */
+    input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; /* Override default look */
+    appearance: none;
+    margin-top: -12px; /* Centers thumb on the track */
+
+    /*custom styles*/
+    background-color: rgb(255, 134, 113);
+    border-radius: 5px;
+    height: 2rem;
+    width: 100px;
+    }
+
+    .group-controls input[type="range"]::-webkit-slider-runnable-track {
+        background-color: #AAA;
+    }
+  </style>
+</head>
+<body>
+    <div id="groups"></div>
+    <script>
+      async function discoverLights() {
+        const groupedLights = await window.lifx.getLights();
+        const lightsDiv = document.getElementById('groups');
+        lightsDiv.innerHTML = ''; // Clear previous lights
+
+        Object.keys(groupedLights).forEach(groupName => {
+          const group = document.createElement('div');
+          group.id = 'group';
+          const groupLegend = document.createElement('h1');
+          groupLegend.onclick = () => setGroupColor(groupName, { kelvin: 4000 });
+          const groupControls = document.createElement('div');
+          groupControls.className = 'group-controls';
+          const groupLights = document.createElement('div');
+          groupLights.id = 'lights';
+          groupLegend.textContent = groupName;
+          
+          const groupPowerButton = document.createElement('span');
+          groupPowerButton.textContent = 'All';
+          groupPowerButton.onclick = () => toggleGroupPower(groupName);
+
+          const groupBrightnessSlider = document.createElement('input');
+          groupBrightnessSlider.type = 'range';
+          groupBrightnessSlider.min = '0';
+          groupBrightnessSlider.max = '100';
+          groupBrightnessSlider.value = '100';
+          groupBrightnessSlider.onchange = () => setGroupBrightness(groupName, groupBrightnessSlider.value);
+
+          groupControls.appendChild(groupBrightnessSlider);
+          groupControls.appendChild(groupPowerButton);
+          
+          group.appendChild(groupLegend);
+          groupLights.appendChild(groupControls);
+          group.appendChild(groupLights);
+
+          groupedLights[groupName].forEach(light => {
+            const lightDiv = document.createElement('div');
+            lightDiv.id = `light-${light.id}`;
+            lightDiv.className = 'light';
+            const power = light.power === 'on' ? 'off' : 'on';
+            const spanColor = light.power === 'on' ? 'tomato' : '#CCC';
+            lightDiv.innerHTML = `
+              <input type="range" style="writing-mode: vertical-lr; direction: rtl" min="0" max="100" value="${light.brightness * 100}" onchange="setBrightness('${light.id}', this.value)">
+              
+              <span id="span-${light.id}" style="background-color: ${spanColor};" onclick="toggleLight('${light.id}', '${light.power}')">${light.label}</span>
+            `;
+            groupLights.appendChild(lightDiv);
+          });
+
+          lightsDiv.appendChild(group);
+        });
+      }
+
+      async function toggleLight(id, currentPower) {
+        const newPower = currentPower === 'on' ? 'off' : 'on';
+        await window.lifx.setPower(id, newPower);
+        const spanElement = document.getElementById(`span-${id}`);
+        spanElement.style.backgroundColor = newPower === 'on' ? 'tomato' : '#CCC';
+        spanElement.setAttribute('onclick', `toggleLight('${id}', '${newPower}')`);
+      }
+
+      async function toggleGroupPower(groupName) {
+        const groupLights = await window.lifx.getLights();
+        const lights = groupLights[groupName];
+        const anyLightOn = lights.some(light => light.power === 'on');
+        const newPower = anyLightOn ? 'off' : 'on';
+
+        const promises = lights.map(light => window.lifx.setPower(light.id, newPower));
+        await Promise.all(promises);
+
+        lights.forEach(light => {
+          const spanElement = document.getElementById(`span-${light.id}`);
+          spanElement.style.backgroundColor = newPower === 'on' ? 'tomato' : '#CCC';
+          spanElement.setAttribute('onclick', `toggleLight('${light.id}', '${newPower}')`);
+        });
+      }
+
+      async function setBrightness(id, brightness) {
+        await window.lifx.setBrightness(id, brightness);
+      }
+
+      async function setGroupBrightness(groupName, brightness) {
+        const groupLights = await window.lifx.getLights();
+        const lights = groupLights[groupName];
+
+        const promises = lights.map(light => window.lifx.setBrightness(light.id, brightness));
+        await Promise.all(promises);
+
+        lights.forEach(light => {
+          const lightSlider = document.querySelector(`#light-${light.id} input[type="range"]`);
+          if (lightSlider) {
+            lightSlider.value = brightness;
+          }
+        });
+      }
+
+      async function setColor(id, color) {
+        await window.lifx.setColor(id, color);
+      }
+
+      async function setGroupColor(groupName, color) {
+        const groupLights = await window.lifx.getLights();
+        const lights = groupLights[groupName];
+
+        const promises = lights.map(light => window.lifx.setColor(light.id, color));
+        await Promise.all(promises);
+      }
+
+      async function refreshLights() {
+        await discoverLights();
+      }
+
+      document.addEventListener('DOMContentLoaded', discoverLights);
+    </script>
+</body>
+</html>
